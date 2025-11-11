@@ -1,765 +1,570 @@
-<!doctype html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AMC Capability Proofs – Teaching App (Prototype)</title>
-  <!-- Tailwind (CDN, for prototyping) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React 18 UMD + Babel Standalone (so we can run TSX in a single file) -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The AMC ProofBuilder</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom Styles -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        /* Tab styles */
+        .tab-btn.active {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+            border-color: #4f46e5;
+        }
+        .tab-btn {
+            background-color: white;
+            color: #374151; /* gray-700 */
+            border: 1px solid #d1d5db; /* gray-300 */
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Proof Card flip styles */
+        .proof-card {
+            perspective: 1000px;
+            cursor: pointer;
+        }
+        .proof-card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+        .proof-card.is-flipped .proof-card-inner {
+            transform: rotateY(180deg);
+        }
+        .proof-card-front,
+        .proof-card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #e5e7eb;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        .proof-card-front {
+            background-color: white;
+        }
+        .proof-card-back {
+            background-color: #f9fafb; /* gray-50 */
+            transform: rotateY(180deg);
+            overflow-y: auto;
+        }
+        /* Styling for the list inside the proof card back */
+        .proof-card-back dl {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .proof-card-back dl:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        .proof-card-back dt {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #4f46e5; /* indigo-600 */
+        }
+        .proof-card-back dd {
+            font-size: 0.875rem;
+            color: #374151; /* gray-700 */
+        }
+    </style>
 </head>
-<body class="bg-gray-100">
-  <div id="root"></div>
+<body class="antialiased">
 
-  <script type="text/babel" data-presets="typescript,react">
-    const { useState, useEffect, useMemo } = React;
+    <div class="container mx-auto max-w-7xl p-4 md:p-8">
+        
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-bold text-slate-900 mb-2">The AMC ProofBuilder</h1>
+            <p class="text-xl text-slate-600">A Workshop for Practical Cooperation</p>
+        </header>
 
-    // ---------- Types (TS annotations will be stripped by Babel) ----------
-    type OutcomeBand = {
-      point: number;
-      low: number;
-      high: number;
-      unit: string;
-    };
-    type ProofLevel = 0 | 1 | 2 | 3 | 4;
-    type RubricSelection = "Exemplary" | "Proficient" | "Basic" | "Missing";
-    type RubricState = { selections: Record<string, RubricSelection>; notes?: string; total?: number; };
-    type CapabilityProof = {
-      id: string;
-      title: string;
-      functionDesc: string;
-      context: string;
-      timeframe: string;
-      outcomeBand: OutcomeBand;
-      baselineDesc: string;
-      protocol: string[];
-      evidenceDesign: string;
-      nParticipants?: number;
-      durationWeeks?: number;
-      robustnessChecks: string[];
-      fairnessPanel: string;
-      identitySafeguards: string[];
-      atcfNotes: string;
-      governance: string;
-      failureEnvelope: string;
-      proofLevel: ProofLevel;
-      steward: string;
-      updatedAt: string;
-      translations: { stewardship?: string; justice?: string; thrift?: string; beauty?: string; };
-      adversarialFindings?: string;
-      rubric?: RubricState;
-    };
+        <!-- Tab Navigation -->
+        <nav class="flex flex-wrap gap-3 mb-8" id="tab-nav">
+            <button class="tab-btn active py-2 px-5 rounded-full font-semibold shadow-sm" data-tab="library">1. Proof Library</button>
+            <button class="tab-btn py-2 px-5 rounded-full font-semibold shadow-sm" data-tab="wizard">2. ProofBuilder Wizard</button>
+            <button class="tab-btn py-2 px-5 rounded-full font-semibold shadow-sm" data-tab="sandbox">3. Sandbox & Studio</button>
+        </nav>
 
-    // ---------- Utilities ----------
-    function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-    function clamp(n:number,min:number,max:number){ return Math.max(min, Math.min(max, n)); }
-    function fmtPct(n:number){ const sign = n>0? "+":""; return \`\${sign}\${n.toFixed(1)}%\`; }
-    function nowISO(){ return new Date().toISOString(); }
+        <!-- Main Content Area -->
+        <main id="tab-content-wrapper">
 
-    function scoreProof(p: CapabilityProof){
-      let score = 0;
-      const filledCore = [p.title, p.functionDesc, p.context, p.outcomeBand, p.protocol[0], p.evidenceDesign, p.governance, p.failureEnvelope].every(Boolean);
-      score += filledCore ? 25 : 10;
-      score += (p.proofLevel * 12);
-      score += clamp(p.robustnessChecks.length * 4, 0, 20);
-      score += clamp(p.identitySafeguards.length * 4, 0, 20);
-      const tCount = [p.translations.stewardship, p.translations.justice, p.translations.thrift, p.translations.beauty].filter(Boolean).length;
-      score += clamp(tCount * 3, 0, 12);
-      return clamp(score, 0, 100);
-    }
+            <!-- ========================== -->
+            <!-- Tab 1: Proof Library       -->
+            <!-- ========================== -->
+            <section id="library" class="tab-content active">
+                <h2 class="text-3xl font-semibold text-indigo-600 mb-4">1. The Proof Library (Inspiration)</h2>
+                <p class="text-lg text-slate-700 leading-relaxed mb-8">
+                    These are real-world examples of "Proofs of Care." They are "assurance cases" you can audit. 
+                    <br>
+                    <strong class="font-semibold text-indigo-700">Click any card to flip it over and see the full proof.</strong>
+                </p>
 
-    // ---------- Example Proofs ----------
-    function exampleProofs(): CapabilityProof[] {
-      const ex1: CapabilityProof = {
-        id: uid(),
-        title: "Clinic No-Show Reduction (Urban A/B)",
-        functionDesc: "Reduce missed specialist appointments",
-        context: "Urban clinics A/B; adults 18–64",
-        timeframe: "16 weeks",
-        outcomeBand: { point: -27, low: -19, high: -35, unit: "% no-shows" },
-        baselineDesc: "Baseline averaged 28% no-show over prior 12 weeks",
-        protocol: [
-          "Pre-visit SMS reminders with respectful language",
-          "Peer navigator outreach for barrier triage",
-          "Transit voucher offered; no pressure to accept",
-          "Opt-out respected at each contact",
-          "Follow-up nudge 24h post-visit for rescheduling"
-        ],
-        evidenceDesign: "Stepped-wedge rollout with matched control weeks; pre-registered",
-        nParticipants: 840,
-        durationWeeks: 16,
-        robustnessChecks: [
-          "Second-site replication achieved −24%",
-          "Sensitivity to weekends and weather",
-          "Ablation: removing transit voucher collapses effect"
-        ],
-        fairnessPanel: "No differential harm detected; translated materials added",
-        identitySafeguards: [
-          "Clear opt-in/opt-out",
-          "Navigator language/gender choice when requested",
-          "Audit for coercion; none reported"
-        ],
-        atcfNotes: "Exit-rate symmetry within 1.1×; no identity-pressure complaints",
-        governance: "Weekly metrics review; stop rule if complaints >2% or exit asymmetry >1.5×",
-        failureEnvelope: "Rural sites without transit partners; effect collapses",
-        proofLevel: 2,
-        steward: "Dr. R. Alvarez",
-        updatedAt: nowISO(),
-        translations: {
-          stewardship: "We honor patients' time: fewer wasted trips, more kept promises.",
-          justice: "Barriers fall hardest on the vulnerable; we remove them without pressure.",
-          thrift: "Every kept appointment saves downstream costs for all of us.",
-          beauty: "Care that arrives on time feels like dignity made visible."
-        },
-        adversarialFindings: "Watch holiday weeks; effect narrows."
-      };
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    
+                    <!-- Proof Card 1: Health Access -->
+                    <div class="proof-card h-[400px]">
+                        <div class="proof-card-inner">
+                            <!-- Card Front -->
+                            <div class="proof-card-front p-6 justify-between">
+                                <div>
+                                    <span class="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full mb-3">L2 - Branch</span>
+                                    <h3 class="text-2xl font-bold text-slate-900">Health Access</h3>
+                                    <p class="text-lg text-slate-600 mt-1">Reducing Clinic No-Shows</p>
+                                </div>
+                                <div class="mt-4">
+                                    <p class="text-3xl font-bold text-green-600">−22% to −32%</p>
+                                    <p class="text-slate-500">No-Show Rate in 16 Weeks</p>
+                                    <p class="mt-6 text-sm font-semibold text-indigo-600 text-center">Click to See Full Proof</p>
+                                </div>
+                            </div>
+                            <!-- Card Back -->
+                            <div class="proof-card-back p-6">
+                                <h4 class="text-lg font-bold text-slate-800 mb-4">Proof: Health Access</h4>
+                                <dl>
+                                    <dt>Function & Context</dt>
+                                    <dd>Reduce specialty-care no-shows in Clinics A/B for adults 18-64.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Outcome Band</dt>
+                                    <dd>−22% to −32% no-shows in 16 wks (center −27%).</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Protocol</dt>
+                                    <dd>SMS reminders + peer navigator + transit voucher.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Evidence & Robustness</dt>
+                                    <dd>Stepped-wedge design. Second-site replication at −24%.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Identity Integrity (ATCF)</dt>
+                                    <dd>Opt-in at each step. Exit honored. Role matching by language/gender. Zero coercion reports.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Failure Envelope</dt>
+                                    <dd>Fails if no transit partner exists; effect collapses.</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
 
-      const ex2: CapabilityProof = {
-        id: uid(),
-        title: "Neighborhood Peak Shaving (6 Blocks)",
-        functionDesc: "Reduce peak-hour electricity demand",
-        context: "Mixed-income neighborhood; summer evenings 6–9pm",
-        timeframe: "12 weeks",
-        outcomeBand: { point: -40, low: -35, high: -45, unit: "% peak kW" },
-        baselineDesc: "Smart meter baseline from prior summer",
-        protocol: [
-          "Appliance timer kits with opt-in setup",
-          "Micro-grid coordination for shared storage",
-          "Voluntary 'quiet hour' social norm",
-          "Weekly feedback cards to households"
-        ],
-        evidenceDesign: "Season-over-season with independent meter audit; synthetic control blocks",
-        nParticipants: 210,
-        durationWeeks: 12,
-        robustnessChecks: [
-          "Two-season stability within band",
-          "Independent audit verifies readings"
-        ],
-        fairnessPanel: "No rebound burden; incentives scaled by income",
-        identitySafeguards: ["No required schedule change", "Opt-out any time"],
-        atcfNotes: "Participants define dignity lines; no reports of social shaming",
-        governance: "Energy guild oversight; stop if complaints >1.5%",
-        failureEnvelope: "Landlord–tenant split incentive weakens participation",
-        proofLevel: 2,
-        steward: "Energy Guild #4",
-        updatedAt: nowISO(),
-        translations: {
-          stewardship: "We care for the grid like a commons.",
-          justice: "Lower bills and fewer outages for those who bear the worst.",
-          thrift: "Cheaper than building new peaker plants.",
-          beauty: "Evening streets hum softer, and sleep comes easier."
-        }
-      };
+                    <!-- Proof Card 2: Neighborhood Energy -->
+                    <div class="proof-card h-[400px]">
+                        <div class="proof-card-inner">
+                            <!-- Card Front -->
+                            <div class="proof-card-front p-6 justify-between">
+                                <div>
+                                    <span class="inline-block bg-purple-100 text-purple-800 text-xs font-semibold px-3 py-1 rounded-full mb-3">L3 - Grove</span>
+                                    <h3 class="text-2xl font-bold text-slate-900">Neighborhood Energy</h3>
+                                    <p class="text-lg text-slate-600 mt-1">Peak Demand Shaving</p>
+                                </div>
+                                <div class="mt-4">
+                                    <p class="text-3xl font-bold text-green-600">−35% to −45%</p>
+                                    <p class="text-slate-500">Peak Demand (Summer Evenings)</p>
+                                    <p class="mt-6 text-sm font-semibold text-indigo-600 text-center">Click to See Full Proof</p>
+                                </div>
+                            </div>
+                            <!-- Card Back -->
+                            <div class="proof-card-back p-6">
+                                <h4 class="text-lg font-bold text-slate-800 mb-4">Proof: Neighborhood Energy</h4>
+                                <dl>
+                                    <dt>Function & Context</dt>
+                                    <dd>Reduce peak energy demand across six blocks in summer evenings.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Outcome Band</dt>
+                                    <dd>−35% to −45% peak demand.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Protocol</dt>
+                                    <dd>Micro-grids + appliance timers + "quiet hour" social norm.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Evidence & Robustness</dt>
+                                    <dd>Season-to-season stability. Independent meter audit.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Identity Integrity (ATCF)</dt>
+                                    <dd>Opt-out respected. No intrusion beyond opt-in timers. Households define dignity lines.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Failure Envelope</dt>
+                                    <dd>Fails due to landlord-tenant split incentives. Fix w/ shared-savings clauses.</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
 
-      const ex3: CapabilityProof = {
-        id: uid(),
-        title: "Schelling-Aware Housing Mix",
-        functionDesc: "Reduce emergent clustering without restricting choice",
-        context: "City districts with diverse demographics",
-        timeframe: "3 quarters",
-        outcomeBand: { point: -32, low: -25, high: -40, unit: "% clustering index" },
-        baselineDesc: "Pre-policy clustering index",
-        protocol: [
-          "Expand default search radius in housing portal",
-          "Seed mixed-amenity hubs",
-          "Incentivize 'bridge groups' to ease cross-tract moves",
-          "Quarterly edge metrics with public dashboards"
-        ],
-        evidenceDesign: "ABM sandbox preview + staged rollout across districts",
-        nParticipants: 1200,
-        durationWeeks: 36,
-        robustnessChecks: [
-          "Cross-district replication",
-          "Sensitivity to transit access"
-        ],
-        fairnessPanel: "No penalties for choices; only added options/incentives",
-        identitySafeguards: ["Freedom of choice preserved", "No pressure to relocate"],
-        atcfNotes: "Identity-respecting incentives only",
-        governance: "Civic lab monitors edge metrics; stop if dissatisfaction >2%",
-        failureEnvelope: "Poor transit undermines effect; pivot to mobility first",
-        proofLevel: 1,
-        steward: "City Civic Lab",
-        updatedAt: nowISO(),
-        translations: {
-          stewardship: "We tend our neighborhoods like gardens, avoiding monocultures.",
-          justice: "Open more doors, not fewer; remove friction, not freedom.",
-          thrift: "Smarter search beats costly mandates.",
-          beauty: "Variety makes a city sing."
-        }
-      };
+                    <!-- Proof Card 3: Housing Anti-Aggregation -->
+                    <div class="proof-card h-[400px]">
+                        <div class="proof-card-inner">
+                            <!-- Card Front -->
+                            <div class="proof-card-front p-6 justify-between">
+                                <div>
+                                    <span class="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-full mb-3">L2 - Branch</span>
+                                    <h3 class="text-2xl font-bold text-slate-900">Inclusive Housing</h3>
+                                    <p class="text-lg text-slate-600 mt-1">Anti-Aggregation Design</p>
+                                </div>
+                                <div class="mt-4">
+                                    <p class="text-3xl font-bold text-green-600">−25% to −40%</p>
+                                    <p class="text-slate-500">Emergent Clustering (Schelling)</p>
+                                    <p class="mt-6 text-sm font-semibold text-indigo-600 text-center">Click to See Full Proof</p>
+                                </div>
+                            </div>
+                            <!-- Card Back -->
+                            <div class="proof-card-back p-6">
+                                <h4 class="text-lg font-bold text-slate-800 mb-4">Proof: Inclusive Housing</h4>
+                                <dl>
+                                    <dt>Function & Context</dt>
+                                    <dd>Reduce emergent clustering using mix-radius rules & "bridge group" incentives.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Outcome Band</dt>
+                                    <dd>25–40% reduction in clustering.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Protocol</dt>
+                                    <dd>Keep freedom to choose. Alter search patterns (expand radius, seed mixed-amenity hubs).</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Evidence & Robustness</dt>
+                                    <dd>ABM sandbox previews. Real-world rollout with quarterly edge metrics.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Identity Integrity (ATCF)</dt>
+                                    <dd>No one pressured to relocate. Incentives support *additional* options, not penalties.</dd>
+                                </dl>
+                                <dl>
+                                    <dt>Failure Envelope</dt>
+                                    <dd>Fails when public transit is poor. Solution must shift to mobility/amenity placement.</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
 
-      return [ex1, ex2, ex3];
-    }
-
-    // ---------- Local Storage ----------
-    const LS_KEY = "amc_proofs_v1";
-    function loadProofsLS(): CapabilityProof[] { try { const raw = localStorage.getItem(LS_KEY); if(!raw) return []; return JSON.parse(raw); } catch { return []; } }
-    function saveProofsLS(proofs: CapabilityProof[]){ try { localStorage.setItem(LS_KEY, JSON.stringify(proofs)); } catch {} }
-
-    // ---------- Shareable Links (URL hash) ----------
-    function encodeState(obj:any):string{ try{ const json = JSON.stringify(obj); return btoa(unescape(encodeURIComponent(json))); } catch { return ""; } }
-    function decodeState<T=any>(s:string):T|null{ try { const json = decodeURIComponent(escape(atob(s))); return JSON.parse(json); } catch { return null; } }
-    function makeProofLink(p:CapabilityProof){ const payload = { proof: p }; return \`\${location.origin}\${location.pathname}#p=\${encodeState(payload)}\`; }
-    function makeGalleryLink(proofs:CapabilityProof[]){ const slim = proofs.map(({adversarialFindings, rubric, ...rest})=>rest); const payload = { gallery: slim }; return \`\${location.origin}\${location.pathname}#g=\${encodeState(payload)}\`; }
-    function parseHash(): {proof?:CapabilityProof; gallery?:CapabilityProof[]} | null {
-      if (!location.hash) return null; const h = location.hash.slice(1);
-      if (h.startsWith("p=")) { const data = decodeState<{proof:CapabilityProof}>(h.slice(2)); return data || null; }
-      if (h.startsWith("g=")) { const data = decodeState<{gallery:CapabilityProof[]}>(h.slice(2)); return data || null; }
-      return null;
-    }
-
-    // ---------- ABM: Schelling Sandbox ----------
-    type Cell = "A" | "B" | "";
-    function generateGrid(size:number, shareA:number, vacancy:number): Cell[] {
-      const total = size*size; const numEmpty = Math.round(total*vacancy); const numAgents = total - numEmpty; const numA = Math.round(numAgents*shareA); const numB = numAgents - numA; const cells: Cell[] = Array(total).fill("");
-      let pool: Cell[] = [ ...Array(numA).fill("A"), ...Array(numB).fill("B"), ...Array(numEmpty).fill("") ];
-      for (let i=0;i<total;i++){ const idx = Math.floor(Math.random()*pool.length); cells[i] = pool[idx]; pool.splice(idx,1);} return cells;
-    }
-    function neighbors(idx:number, size:number):number[]{ const x = idx % size, y = Math.floor(idx/size); const res:number[] = []; for (let dy=-1; dy<=1; dy++){ for (let dx=-1; dx<=1; dx++){ if (dx===0 && dy===0) continue; const nx=x+dx, ny=y+dy; if (nx>=0 && nx<size && ny>=0 && ny<size) res.push(ny*size+nx);} } return res; }
-    function stepSchelling(cells:Cell[], size:number, simThresh:number){
-      const empties:number[] = []; const unsatisfied:number[] = []; let satisfiedCount=0; let totalSameFrac=0; for (let i=0;i<cells.length;i++){ const c=cells[i]; if (c===""){ empties.push(i); continue; } const ns=neighbors(i,size); let like=0, tot=0; for (const j of ns){ if (cells[j]!==""){ tot++; if (cells[j]===c) like++; } } const frac= tot===0 ? 1 : like/tot; totalSameFrac += frac; if (frac>=simThresh){ satisfiedCount++; } else { unsatisfied.push(i); } }
-      const newCells=cells.slice(); let moved=0; for (let k=unsatisfied.length-1;k>0;k--){ const r=Math.floor(Math.random()*(k+1)); [unsatisfied[k], unsatisfied[r]] = [unsatisfied[r], unsatisfied[k]]; }
-      for (const i of unsatisfied){ if (empties.length===0) break; const c=newCells[i]; if (c==="") continue; const eIdx=Math.floor(Math.random()*empties.length); const to=empties[eIdx]; empties.splice(eIdx,1); newCells[to]=c; newCells[i]=""; empties.push(i); moved++; }
-      const satisfiedPct = (satisfiedCount / (cells.length - empties.length)) * 100; const avgSame = totalSameFrac / (cells.length - empties.length); return { cells:newCells, moved, satisfiedPct, avgSame };
-    }
-    function SegregationIndex({cells, size}:{cells:Cell[]; size:number}){
-      let same=0, tot=0; for (let i=0;i<cells.length;i++){ const c=cells[i]; if (c==="") continue; for (const j of neighbors(i,size)){ if (j>i && cells[j]!==""){ tot++; if (cells[j]===c) same++; } } } const frac = tot===0?0:same/tot; return (<div className="text-sm text-gray-700 mt-1">Segregation index (neighbor similarity): {(frac*100).toFixed(1)}%</div>);
-    }
-    function ABMSandbox(){
-      const [size,setSize] = useState(20); const [shareA,setShareA]=useState(0.5); const [vacancy,setVacancy]=useState(0.2); const [threshold,setThreshold]=useState(0.3);
-      const [cells,setCells] = useState(()=>generateGrid(20,0.5,0.2)); const [iter,setIter]=useState(0); const [running,setRunning]=useState(false);
-      const [stats,setStats]=useState({moved:0,sat:0,avgSame:0});
-      function reset(){ setCells(generateGrid(size,shareA,vacancy)); setIter(0); setStats({moved:0,sat:0,avgSame:0}); setRunning(false); }
-      function step(){ const {cells:c2, moved, satisfiedPct, avgSame} = stepSchelling(cells,size,threshold); setCells(c2); setIter(it=>it+1); setStats({moved, sat:satisfiedPct, avgSame}); }
-      useEffect(()=>{ reset(); },[size,shareA,vacancy]);
-      useEffect(()=>{ let id:number|undefined; if (running){ id = window.setInterval(()=>{ step(); }, 200); } return ()=>{ if(id) window.clearInterval(id); }; },[running, cells]);
-      const boxSize = clamp(480/size, 8, 24);
-      return (
-        <div className="w-full">
-          <h3 className="text-lg font-semibold mb-2">ABM Sandbox: Schelling Segregation</h3>
-          <p className="text-sm text-gray-700 mb-3">Illustrates how simple local preferences generate unintended macro-patterns. Tune parameters and watch clustering emerge. Use findings to define <em>failure envelopes</em> and edge interventions.</p>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <div className="flex flex-wrap gap-3 items-center mb-3">
-                <label className="text-sm">Grid: {size}×{size}
-                  <input type="range" min={10} max={30} value={size} onChange={e=>setSize(parseInt(e.target.value))} className="w-40 ml-2"/>
-                </label>
-                <label className="text-sm">Share A: {(shareA*100).toFixed(0)}%
-                  <input type="range" min={0.1} max={0.9} step={0.05} value={shareA} onChange={e=>setShareA(parseFloat(e.target.value))} className="w-40 ml-2"/>
-                </label>
-                <label className="text-sm">Vacancy: {(vacancy*100).toFixed(0)}%
-                  <input type="range" min={0.05} max={0.4} step={0.01} value={vacancy} onChange={e=>setVacancy(parseFloat(e.target.value))} className="w-40 ml-2"/>
-                </label>
-                <label className="text-sm">Similarity threshold: {(threshold*100).toFixed(0)}%
-                  <input type="range" min={0} max={0.8} step={0.05} value={threshold} onChange={e=>setThreshold(parseFloat(e.target.value))} className="w-40 ml-2"/>
-                </label>
-              </div>
-              <div className="flex gap-2 mb-3">
-                <button className="px-3 py-1.5 rounded bg-gray-900 text-white" onClick={reset}>Reset</button>
-                <button className="px-3 py-1.5 rounded bg-blue-600 text-white" onClick={step}>Step</button>
-                <button className="px-3 py-1.5 rounded bg-green-600 text-white" onClick={()=>setRunning(r=>!r)}>{running?"Pause":"Run"}</button>
-              </div>
-              <div style={{ width: boxSize*size, height: boxSize*size }} className="border rounded bg-white shadow">
-                <div className="grid" style={{ gridTemplateColumns: \`repeat(\${size}, \${boxSize}px)\` }}>
-                  {cells.map((c,i)=>{
-                    const bg = c===""?"#ffffff" : c==="A"?"#111827" : "#9ca3af";
-                    return <div key={i} title={c===""?"Vacant": c} style={{ width: boxSize, height: boxSize, background: bg, border: c===""?"1px solid #e5e7eb":"none"}}/>;
-                  })}
                 </div>
-              </div>
-            </div>
-            <div>
-              <div className="p-3 border rounded bg-gray-50">
-                <div className="text-sm">Iterations: <span className="font-mono">{iter}</span></div>
-                <div className="text-sm">Moved last step: <span className="font-mono">{stats.moved}</span></div>
-                <div className="text-sm">% Satisfied (agents above threshold): <span className="font-mono">{stats.sat.toFixed(1)}%</span></div>
-                <div className="text-sm">Avg same-neighbor fraction: <span className="font-mono">{(stats.avgSame*100).toFixed(1)}%</span></div>
-                <SegregationIndex cells={cells} size={size}/>
-                <div className="mt-3 text-sm text-gray-700">
-                  <p className="mb-2"><strong>Interpretation:</strong> Rising neighbor-similarity shows emergent clustering—even without intent. To counter, change <em>search patterns</em> and <em>bridge frictions</em>, not identities. Publish this as the proof's <em>failure envelope</em> and specify edge interventions.</p>
+            </section>
+
+            <!-- ========================== -->
+            <!-- Tab 2: ProofBuilder Wizard -->
+            <!-- ========================== -->
+            <section id="wizard" class="tab-content">
+                <h2 class="text-3xl font-semibold text-indigo-600 mb-4">2. The ProofBuilder Wizard (Creation)</h2>
+                <p class="text-lg text-slate-700 leading-relaxed mb-8">
+                    Create your own "L0 - Seed" Proof. This is a covenant: "prove small, publish outcomes, protect every participant."
+                </p>
+
+                <form id="proof-builder-form" class="space-y-10">
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <legend class="text-xl font-semibold text-slate-900 px-2">Step 1: Function & Context</legend>
+                        <p class="text-slate-600 mb-4">What will you do, and where/for whom?</p>
+                        <textarea id="wiz-function" class="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="e.g., 'Reduce food waste from campus dining halls (A & B) by collecting edible surplus for the campus food pantry.'"></textarea>
+                    </fieldset>
+
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <legend class="text-xl font-semibold text-slate-900 px-2">Step 2: Outcome Band</legend>
+                        <p class="text-slate-600 mb-4">What is your baseline? What is the expected range of success?</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input id="wiz-baseline" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Baseline (e.g., '~50 lbs/day wasted')">
+                            <input id="wiz-band" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Outcome Band (e.g., '20-30 lbs/day rescued')">
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <legend class="text-xl font-semibold text-slate-900 px-2">Step 3: Replicable Protocol</legend>
+                        <p class="text-slate-600 mb-4">What are the minimal, replicable steps?</p>
+                        <textarea id="wiz-protocol" class="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="e.g., '1. Two volunteers per hall. 2. Collect surplus at 8 PM. 3. Weigh and store in pantry fridge.'"></textarea>
+                    </fieldset>
+
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <legend class="text-xl font-semibold text-slate-900 px-2">Step 4: Evidence & Robustness</legend>
+                        <p class="text-slate-600 mb-4">How will you know it works? How will you check it?</p>
+                        <textarea id="wiz-evidence" class="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="e.g., 'Simple pre/post comparison. Daily weigh-in log, open to all. Check for 4 weeks.'"></textarea>
+                    </fieldset>
+
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-indigo-500 ring-2 ring-indigo-200">
+                        <legend class="text-xl font-semibold text-indigo-700 px-2">Step 5: Identity Integrity (ATCF "Soul-Safety")</legend>
+                        <p class="text-slate-600 mb-4">The ethical "Do No Harm" constraint. How will you protect participants?</p>
+                        <div class="space-y-3">
+                            <label class="flex items-center">
+                                <input type="checkbox" id="wiz-check-opt-in" class="h-5 w-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
+                                <span class="ml-3 text-slate-700">Clear, easy, 100% voluntary opt-in.</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="wiz-check-exit" class="h-5 w-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
+                                <span class="ml-3 text-slate-700">"Right of Exit" is clear, easy, and non-punitive.</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" id="wiz-check-no-coercion" class="h-5 w-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500">
+                                <span class="ml-3 text-slate-700">Protocol does not coerce or manipulate.</span>
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <fieldset class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <legend class="text-xl font-semibold text-slate-900 px-2">Step 6: Governance & Failure Envelope</legend>
+                        <p class="text-slate-600 mb-4">Who is the steward? Where do you expect this to fail?</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <input id="wiz-steward" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Steward (e.g., 'Campus Green Club')">
+                            <input id="wiz-failure" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Failure Envelope (e.g., 'Fails during exams')">
+                        </div>
+                    </fieldset>
+
+                    <button id="generate-proof-btn" class="w-full bg-green-600 text-white font-bold py-4 px-8 rounded-lg text-lg shadow-lg hover:bg-green-700 transition-all">
+                        Generate My "L0 - Seed" Proof Card
+                    </button>
+                </form>
+
+                <div id="new-proof-container" class="mt-12 hidden">
+                    <h2 class="text-3xl font-semibold text-slate-900 mb-8 text-center">Your Generated Proof</h2>
+                    <div id="new-proof-output" class="max-w-md mx-auto">
+                        <!-- New proof card will be injected here by JS -->
+                    </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
+            </section>
 
-    // ---------- Common UI helpers ----------
-    function FieldLabel({title, desc}:{title:string; desc?:string}){
-      return (
-        <div className="mb-1">
-          <div className="text-sm font-semibold">{title}</div>
-          {desc && <div className="text-xs text-gray-600">{desc}</div>}
-        </div>
-      );
-    }
-    function TextArea({value,onChange,rows=3,placeholder}:{value:string;onChange:(v:string)=>void;rows?:number;placeholder?:string}){
-      return (<textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows} placeholder={placeholder} className="w-full border rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>);
-    }
-    function TextInput({value,onChange,placeholder}:{value:string;onChange:(v:string)=>void;placeholder?:string}){
-      return (<input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} className="w-full border rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>);
-    }
-    function NumberInput({value,onChange,min,max,step=1}:{value:number;onChange:(v:number)=>void;min?:number;max?:number;step?:number}){
-      return (<input type="number" value={value} onChange={e=>onChange(parseFloat(e.target.value))} min={min} max={max} step={step} className="w-28 border rounded p-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>);
-    }
-    function Chip({label, onRemove}:{label:string; onRemove?:()=>void}){
-      return (<span className="inline-flex items-center gap-1 bg-gray-200 text-gray-800 text-xs px-2 py-1 rounded-full mr-1 mb-1">{label}{onRemove && <button className="ml-1 text-gray-700 hover:text-black" onClick={onRemove}>×</button>}</span>);
-    }
-    function ArrayEditor({items,setItems,placeholder}:{items:string[]; setItems:(arr:string[])=>void; placeholder?:string}){
-      const [val,setVal] = useState(""); function add(){ if(val.trim()){ setItems([...items, val.trim()]); setVal(""); } }
-      return (
-        <div>
-          <div className="flex gap-2 mb-2">
-            <input value={val} onChange={e=>setVal(e.target.value)} placeholder={placeholder || "Add item"} className="flex-1 border rounded p-2 text-sm"/>
-            <button className="px-3 py-1.5 rounded bg-gray-900 text-white" onClick={add}>Add</button>
-          </div>
-          <div>{items.map((it,i)=>(<Chip key={i} label={it} onRemove={()=>setItems(items.filter((_,j)=>j!==i))}/>))}</div>
-        </div>
-      );
-    }
+            <!-- ========================== -->
+            <!-- Tab 3: Sandbox & Studio    -->
+            <!-- ========================== -->
+            <section id="sandbox" class="tab-content">
+                <h2 class="text-3xl font-semibold text-indigo-600 mb-4">3. The Sandbox & Studio (Teaching Tools)</h2>
+                <p class="text-lg text-slate-700 leading-relaxed mb-8">
+                    Use these tools to practice the key skills of the AMC: translating, auditing, and checking for integrity.
+                </p>
 
-    function ProofCard({p}:{p:CapabilityProof}){
-      return (
-        <div className="border rounded-lg p-4 bg-white shadow-sm">
-          <div className="flex justify-between items-start gap-2">
-            <div>
-              <h4 className="text-base font-semibold">{p.title}</h4>
-              <div className="text-xs text-gray-600">Updated {new Date(p.updatedAt).toLocaleString()} • Steward: {p.steward}</div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-gray-600">Proof Level</div>
-              <div className="text-lg font-bold">L{p.proofLevel}</div>
-            </div>
-          </div>
-          <div className="grid md:grid-cols-2 gap-3 mt-3 text-sm">
-            <div>
-              <div><span className="font-semibold">Function:</span> {p.functionDesc}</div>
-              <div><span className="font-semibold">Context:</span> {p.context} • <span className="font-semibold">Timeframe:</span> {p.timeframe}</div>
-              <div><span className="font-semibold">Baseline:</span> {p.baselineDesc}</div>
-              <div className="mt-1"><span className="font-semibold">Outcome band:</span> {fmtPct(p.outcomeBand.point)} ({fmtPct(p.outcomeBand.low)} to {fmtPct(p.outcomeBand.high)}) of {p.outcomeBand.unit}</div>
-              <div className="mt-2">
-                <div className="font-semibold">Protocol</div>
-                <ul className="list-disc pl-5">{p.protocol.map((step,i)=>(<li key={i}>{step}</li>))}</ul>
-              </div>
-            </div>
-            <div>
-              <div><span className="font-semibold">Evidence design:</span> {p.evidenceDesign} {p.nParticipants?`• N=\${p.nParticipants}`:""} {p.durationWeeks?`• \${p.durationWeeks} weeks`:""}</div>
-              <div className="mt-2"><span className="font-semibold">Robustness checks:</span> {p.robustnessChecks.join("; ") || "—"}</div>
-              <div className="mt-2"><span className="font-semibold">Fairness/side-effects:</span> {p.fairnessPanel || "—"}</div>
-              <div className="mt-2"><span className="font-semibold">Identity safeguards:</span> {p.identitySafeguards.join("; ") || "—"}</div>
-              <div className="mt-2"><span className="font-semibold">ATCF notes:</span> {p.atcfNotes || "—"}</div>
-              <div className="mt-2"><span className="font-semibold">Failure envelope:</span> {p.failureEnvelope || "—"}</div>
-              <div className="mt-2"><span className="font-semibold">Governance:</span> {p.governance || "—"}</div>
-            </div>
-          </div>
-          <div className="mt-3 grid md:grid-cols-2 gap-3">
-            <div className="p-2 bg-gray-50 rounded">
-              <div className="text-xs uppercase text-gray-600">Translations</div>
-              <div className="text-sm"><span className="font-semibold">Stewardship: </span>{p.translations.stewardship || "—"}</div>
-              <div className="text-sm"><span className="font-semibold">Justice: </span>{p.translations.justice || "—"}</div>
-              <div className="text-sm"><span className="font-semibold">Thrift: </span>{p.translations.thrift || "—"}</div>
-              <div className="text-sm"><span className="font-semibold">Beauty: </span>{p.translations.beauty || "—"}</div>
-            </div>
-            <div className="p-2 bg-gray-50 rounded">
-              <div className="text-xs uppercase text-gray-600">Score (informal)</div>
-              <div className="text-2xl font-bold">{scoreProof(p)}</div>
-              <div className="text-xs text-gray-600">Completeness, level, robustness, identity safety, translations</div>
-            </div>
-          </div>
-        </div>
-      );
-    }
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    
+                    <!-- Tool 1: Translation Studio -->
+                    <div class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <h3 class="text-2xl font-semibold text-slate-900 mb-4">A. The Translation Studio</h3>
+                        <p class="text-slate-600 mb-6">"One deed, many reasons." Take one functional proof and translate it into multiple moral grammars to welcome diverse collaborators.</p>
+                        
+                        <label classs="block text-sm font-medium text-slate-700 mb-2">A Shared Function:</label>
+                        <p class="text-lg font-semibold text-indigo-700 p-3 bg-indigo-50 rounded-md mb-4">"Reduce clinic no-shows."</p>
+                        
+                        <label for="trans-justice" class="block text-sm font-medium text-slate-700">Translation for Justice:</label>
+                        <input id="trans-justice" type="text" class="w-full p-2 mb-3 border border-gray-300 rounded-lg" placeholder="e.g., 'Ensuring equitable access for all.'">
+                        
+                        <label for="trans-thrift" class="block text-sm font-medium text-slate-700">Translation for Thrift/Efficiency:</label>
+                        <input id="trans-thrift" type="text" class="w-full p-2 mb-3 border border-gray-300 rounded-lg" placeholder="e.g., 'Saving $50k in wasted appointments.'">
+                        
+                        <label for="trans-community" class="block text-sm font-medium text-slate-700">Translation for Community:</label>
+                        <input id="trans-community" type="text" class="w-full p-2 mb-3 border border-gray-300 rounded-lg" placeholder="e.g., 'Making sure our neighbors get help.'">
+                    </div>
 
-    function AuditTables({p}:{p:CapabilityProof}){
-      const [evPass,setEvPass] = useState<boolean | null>(null);
-      const [evNotes,setEvNotes] = useState("");
-      const [idPass,setIdPass] = useState<boolean | null>(null);
-      const [idNotes,setIdNotes] = useState("");
-      useEffect(()=>{ if (p.adversarialFindings) setEvNotes(p.adversarialFindings); },[p.adversarialFindings]);
-      return (
-        <div className="grid md:grid-cols-2 gap-4 text-sm">
-          <div className="border rounded p-3 bg-white">
-            <div className="font-semibold mb-2">Table 1: Evidence vs Outcome Band</div>
-            <div className="mb-2">Does the evidence justify the claimed band?</div>
-            <div className="flex gap-2 mb-2">
-              <button className={\`px-3 py-1.5 rounded \${evPass===true?"bg-green-600 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(true)}>Pass</button>
-              <button className={\`px-3 py-1.5 rounded \${evPass===false?"bg-red-600 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(false)}>Fail</button>
-              <button className={\`px-3 py-1.5 rounded \${evPass===null?"bg-gray-900 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(null)}>Unset</button>
-            </div>
-            <TextArea value={evNotes} onChange={setEvNotes} rows={5} placeholder="Notes: design choice, biases, replication, sensitivity…"/>
-          </div>
-          <div className="border rounded p-3 bg-white">
-            <div className="font-semibold mb-2">Table 2: Identity / Soul-Safety (ATCF)</div>
-            <div className="mb-2">Are identity safeguards adequate?</div>
-            <div className="flex gap-2 mb-2">
-              <button className={\`px-3 py-1.5 rounded \${idPass===true?"bg-green-600 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(true)}>Pass</button>
-              <button className={\`px-3 py-1.5 rounded \${idPass===false?"bg-red-600 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(false)}>Fail</button>
-              <button className={\`px-3 py-1.5 rounded \${idPass===null?"bg-gray-900 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(null)}>Unset</button>
-            </div>
-            <TextArea value={idNotes} onChange={setIdNotes} rows={5} placeholder="Notes: opt-in clarity, exit symmetry, role choice, dignity lines…"/>
-          </div>
-        </div>
-      );
-    }
+                    <!-- Tool 2: Failure Explorer -->
+                    <div class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <h3 class="text-2xl font-semibold text-slate-900 mb-4">B. The Failure Explorer</h3>
+                        <p class="text-slate-600 mb-6">An "Adversarial Audit." Proofs are strong because they *publish their failures*. Test what happens when you push a proof outside its envelope.</p>
+                        
+                        <label for="fail-proof" class="block text-sm font-medium text-slate-700 mb-2">Select a Proof:</label>
+                        <select id="fail-proof" class="w-full p-2 mb-3 border border-gray-300 rounded-lg">
+                            <option value="energy">Neighborhood Energy</option>
+                            <option value="housing">Inclusive Housing</option>
+                        </select>
 
-    // ---------- Rubrics ----------
-    const RUBRIC_CRITERIA = [
-      { id: "evidence", label: "Evidence Quality (design, bias handling, replication)", weight: 25, hint: "Pragmatic design fits context; replication and sensitivities present." },
-      { id: "band", label: "Outcome Band Coherence (metrics, MDE, CI)", weight: 15, hint: "Clear metrics, baseline, intervals; band justified." },
-      { id: "identity", label: "Identity/Soul-Safety (ATCF)", weight: 20, hint: "Opt-in, exit symmetry, dignity protections; no coercion." },
-      { id: "protocol", label: "Protocol Replicability (steps & tunables)", weight: 15, hint: "Minimal steps listed; constants vs tunables clear." },
-      { id: "robustness", label: "Robustness & Failure Envelope", weight: 15, hint: "Sensitivity, ablations, failure contexts published." },
-      { id: "translation", label: "Translation Fidelity (multi-grammar, truthful)", weight: 10, hint: "At least 3 faithful retellings without spin." },
-    ];
-    const RUBRIC_LEVELS = ["Exemplary","Proficient","Basic","Missing"] as RubricSelection[];
-    const LEVEL_MULTIPLIER: Record<RubricSelection, number> = { Exemplary: 1.0, Proficient: 0.8, Basic: 0.6, Missing: 0.0 };
+                        <label for="fail-stress" class="block text-sm font-medium text-slate-700 mb-2">Select a Stressor:</label>
+                        <select id="fail-stress" class="w-full p-2 mb-3 border border-gray-300 rounded-lg">
+                            <option value="none">-- Select a stressor --</option>
+                            <option value="landlord">Inject: Landlord-tenant split incentive</option>
+                            <option value="transit">Inject: Poor public transit</option>
+                            <option value="fines">Inject: Coercive 'fines' for non-participation</option>
+                        </select>
+                        
+                        <button id="fail-run-btn" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700">Run Audit</button>
 
-    function RubricPanel({p, onSave}:{p:CapabilityProof; onSave:(rubric:RubricState)=>void}){
-      const [selections,setSelections] = useState<Record<string,RubricSelection>>(()=> p.rubric?.selections || Object.fromEntries(RUBRIC_CRITERIA.map((c:any)=>[c.id,"Basic"])));
-      const [notes,setNotes] = useState<string>(p.rubric?.notes || "");
-      function assist(){
-        const s: Record<string,RubricSelection> = {...selections};
-        s.evidence = (p.evidenceDesign && (p.nParticipants||0)>0) ? (p.robustnessChecks.length>=2?"Exemplary":"Proficient") : "Basic";
-        s.band = (p.outcomeBand && p.baselineDesc)?"Proficient":"Basic";
-        s.identity = (p.identitySafeguards.length>=2 && p.atcfNotes)?"Proficient":"Basic";
-        s.protocol = (p.protocol.length>=5)?"Proficient":"Basic";
-        s.robustness = (p.robustnessChecks.length>=2 && p.failureEnvelope)?"Proficient":"Basic";
-        const tCount = [p.translations.stewardship,p.translations.justice,p.translations.thrift,p.translations.beauty].filter(Boolean).length;
-        s.translation = tCount>=3?"Proficient":(tCount>=1?"Basic":"Missing");
-        setSelections(s);
-      }
-      const total = RUBRIC_CRITERIA.reduce((acc:number,c:any)=> acc + c.weight * LEVEL_MULTIPLIER[selections[c.id] || "Missing"], 0);
-      function save(){ onSave({ selections, notes, total }); }
-      function toMarkdown(){
-        const lines = [
-          \`# Rubric — \${p.title}\`,
-          \`Total: \${Math.round(total)}/100\`,
-          "",
-          ...RUBRIC_CRITERIA.map((c:any)=>\`- **\${c.label}** (\${c.weight}): \${selections[c.id] || "Missing"}\`),
-          "",
-          notes?\`**Notes:**\n\${notes}\`:""
-        ].filter(Boolean);
-        return lines.join("\n");
-      }
-      async function copyMarkdown(){ try { await navigator.clipboard.writeText(toMarkdown()); } catch {} }
-      return (
-        <div className="border rounded-lg p-4 bg-white">
-          <h3 className="text-lg font-semibold mb-2">Rubric — Weighted Criteria</h3>
-          <div className="text-xs text-gray-600 mb-3">Score by criterion (Exemplary/Proficient/Basic/Missing). Weights sum to 100.</div>
-          <div className="space-y-3">
-            {RUBRIC_CRITERIA.map((c:any)=> (
-              <div key={c.id} className="flex items-start gap-3">
-                <div className="flex-1">
-                  <div className="text-sm font-medium">{c.label} <span className="text-xs text-gray-500">({c.weight} pts)</span></div>
-                  <div className="text-xs text-gray-500">{c.hint}</div>
+                        <div id="fail-result" class="mt-4 p-4 rounded-lg text-center font-semibold hidden"></div>
+                    </div>
+
+                    <!-- Tool 3: ATCF Check-in -->
+                    <div class="p-6 bg-white rounded-2xl shadow-lg border border-gray-200">
+                        <h3 class="text-2xl font-semibold text-slate-900 mb-4">C. The ATCF Check-In</h3>
+                        <p class="text-slate-600 mb-6">A tool for stewards to monitor "soul-safety." A good proof must preserve the "core integrity" of all participants.</p>
+                        
+                        <div class="space-y-4">
+                            <p class="font-medium text-slate-700">1. Did you feel free to opt-out at any time?</p>
+                            
+                            <p class="font-medium text-slate-700">2. How would you rate the 'dignity' of this process for you? (1=Low, 10=High)</p>
+
+                            <p class="font-medium text-slate-700">3. Did any part of this work require you to betray your own values to "make the numbers"?</p>
+                        </div>
+                    </div>
+
                 </div>
-                <select className="border rounded p-1 text-sm" value={selections[c.id] || "Missing"} onChange={e=>setSelections({...selections, [c.id]: e.target.value as RubricSelection})}>
-                  {RUBRIC_LEVELS.map((l:any)=> <option key={l} value={l}>{l}</option>)}
-                </select>
-              </div>
-            ))}
-          </div>
-          <div className="mt-3">
-            <div className="text-sm font-semibold">Notes</div>
-            <TextArea value={notes} onChange={setNotes} rows={5} placeholder="Strengths, gaps, requests for changes…"/>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button className="px-3 py-1.5 rounded bg-gray-900 text-white" onClick={save}>Save to Proof</button>
-            <button className="px-3 py-1.5 rounded bg-gray-200" onClick={assist}>Assist (prefill)</button>
-            <div className="ml-auto text-sm">Total: <span className="font-bold">{Math.round(total)}</span>/100</div>
-            <button className="px-3 py-1.5 rounded bg-amber-500 text-white" onClick={copyMarkdown}>Copy Markdown</button>
-          </div>
-        </div>
-      );
-    }
+            </section>
+        </main>
+    </div>
 
-    // ---------- Proof creation form (minimal) ----------
-    function ProofForm({ onSave, initial }:{ onSave:(p:CapabilityProof)=>void; initial?:CapabilityProof }){
-      const [title,setTitle] = useState(initial?.title || "");
-      const [functionDesc,setFunctionDesc] = useState(initial?.functionDesc || "");
-      const [context,setContext] = useState(initial?.context || "");
-      const [timeframe,setTimeframe] = useState(initial?.timeframe || "");
-      const [baselineDesc,setBaselineDesc] = useState(initial?.baselineDesc || "");
-      const [unit,setUnit] = useState(initial?.outcomeBand.unit || "% change");
-      const [point,setPoint] = useState<number>(initial?.outcomeBand.point ?? -10);
-      const [low,setLow] = useState<number>(initial?.outcomeBand.low ?? -5);
-      const [high,setHigh] = useState<number>(initial?.outcomeBand.high ?? -15);
-      const [protocol,setProtocol] = useState<string[]>(initial?.protocol || []);
-      const [evidenceDesign,setEvidenceDesign] = useState(initial?.evidenceDesign || "");
-      const [nParticipants,setNParticipants] = useState<number>(initial?.nParticipants ?? 0);
-      const [durationWeeks,setDurationWeeks] = useState<number>(initial?.durationWeeks ?? 0);
-      const [robustnessChecks,setRobustnessChecks] = useState<string[]>(initial?.robustnessChecks || []);
-      const [fairnessPanel,setFairnessPanel] = useState(initial?.fairnessPanel || "");
-      const [identitySafeguards,setIdentitySafeguards] = useState<string[]>(initial?.identitySafeguards || []);
-      const [atcfNotes,setAtcfNotes] = useState(initial?.atcfNotes || "");
-      const [governance,setGovernance] = useState(initial?.governance || "");
-      const [failureEnvelope,setFailureEnvelope] = useState(initial?.failureEnvelope || "");
-      const [proofLevel,setProofLevel] = useState<ProofLevel>(initial?.proofLevel ?? 1);
-      const [steward,setSteward] = useState(initial?.steward || "");
+    <!-- JavaScript -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
 
-      function save(){
-        const p: CapabilityProof = {
-          id: initial?.id || uid(),
-          title, functionDesc, context, timeframe,
-          outcomeBand: { point, low, high, unit },
-          baselineDesc,
-          protocol,
-          evidenceDesign,
-          nParticipants: nParticipants || undefined,
-          durationWeeks: durationWeeks || undefined,
-          robustnessChecks,
-          fairnessPanel,
-          identitySafeguards,
-          atcfNotes,
-          governance,
-          failureEnvelope,
-          proofLevel,
-          steward,
-          updatedAt: nowISO(),
-          translations: {}
-        };
-        onSave(p);
-      }
+            // --- Tab Switching Logic ---
+            const tabNav = document.getElementById('tab-nav');
+            const tabButtons = tabNav.querySelectorAll('.tab-btn');
+            const tabContents = document.getElementById('tab-content-wrapper').querySelectorAll('.tab-content');
 
-      return (
-        <div className="border rounded-lg p-4 bg-white space-y-4">
-          <h3 className="text-lg font-semibold">Create Capability Proof</h3>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <FieldLabel title="Title"/><TextInput value={title} onChange={setTitle} placeholder="e.g., Clinic No-Show Reduction"/>
-              <FieldLabel title="Function"/><TextInput value={functionDesc} onChange={setFunctionDesc} placeholder="What capability are you proving?"/>
-              <FieldLabel title="Context"/><TextInput value={context} onChange={setContext} placeholder="Where/for whom?"/>
-              <FieldLabel title="Timeframe"/><TextInput value={timeframe} onChange={setTimeframe} placeholder="e.g., 12 weeks"/>
-              <FieldLabel title="Baseline"/><TextInput value={baselineDesc} onChange={setBaselineDesc} placeholder="What was happening before?"/>
-              <FieldLabel title="Outcome Band"/>
-              <div className="flex gap-2 items-center flex-wrap">
-                <NumberInput value={point} onChange={setPoint}/>
-                <NumberInput value={low} onChange={setLow}/>
-                <NumberInput value={high} onChange={setHigh}/>
-                <TextInput value={unit} onChange={setUnit} placeholder="% no-shows"/>
-              </div>
-              <FieldLabel title="Evidence Design"/><TextInput value={evidenceDesign} onChange={setEvidenceDesign} placeholder="e.g., stepped-wedge, matched cohort…"/>
-              <div className="flex gap-3 mt-2">
-                <label className="text-sm">N <NumberInput value={nParticipants} onChange={setNParticipants}/></label>
-                <label className="text-sm">Weeks <NumberInput value={durationWeeks} onChange={setDurationWeeks}/></label>
-              </div>
-            </div>
-            <div>
-              <FieldLabel title="Protocol (steps)"/><ArrayEditor items={protocol} setItems={setProtocol} placeholder="Add step"/>
-              <FieldLabel title="Robustness Checks"/><ArrayEditor items={robustnessChecks} setItems={setRobustnessChecks} placeholder="Add check"/>
-              <FieldLabel title="Fairness / Side-Effects"/><TextArea value={fairnessPanel} onChange={setFairnessPanel} rows={3}/>
-              <FieldLabel title="Identity Safeguards"/><ArrayEditor items={identitySafeguards} setItems={setIdentitySafeguards} placeholder="Add safeguard"/>
-              <FieldLabel title="ATCF Notes"/><TextArea value={atcfNotes} onChange={setAtcfNotes} rows={2}/>
-              <FieldLabel title="Failure Envelope"/><TextArea value={failureEnvelope} onChange={setFailureEnvelope} rows={2}/>
-              <FieldLabel title="Governance"/><TextArea value={governance} onChange={setGovernance} rows={2}/>
-              <div className="flex gap-3 items-center mt-2">
-                <label className="text-sm">Proof Level
-                  <select className="ml-2 border rounded p-1 text-sm" value={proofLevel as any} onChange={e=>setProofLevel(parseInt(e.target.value) as ProofLevel)}>
-                    {[0,1,2,3,4].map(l=> <option key={l} value={l}>L{l}</option>)}
-                  </select>
-                </label>
-                <label className="text-sm">Steward <input className="ml-2 border rounded p-1 text-sm" value={steward} onChange={e=>setSteward(e.target.value)} /></label>
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button className="px-3 py-1.5 rounded bg-gray-900 text-white" onClick={save}>Save Proof</button>
-          </div>
-        </div>
-      );
-    }
+            tabNav.addEventListener('click', (e) => {
+                const clickedTab = e.target.closest('.tab-btn');
+                if (!clickedTab) return;
 
-    // ---------- Main App ----------
-    type Tab = "gallery" | "create" | "audit" | "translate" | "abm" | "rubric";
-    function CapabilityProofsApp(){
-      const [proofs,setProofs] = useState<CapabilityProof[]>(()=>{
-        const parsed = parseHash();
-        if (parsed?.gallery && parsed.gallery.length) return parsed.gallery;
-        const base = loadProofsLS();
-        if (parsed?.proof) return [parsed.proof, ...base];
-        return base;
-      });
-      const [active,setActive] = useState<Tab>("gallery");
-      const [selectedId,setSelectedId] = useState<string | null>(proofs[0]?.id || null);
-      const selected = useMemo(()=> proofs.find(p=>p.id===selectedId) || null, [proofs,selectedId]);
-      useEffect(()=>{ saveProofsLS(proofs); },[proofs]);
-      useEffect(()=>{ if(proofs.length && !selectedId) setSelectedId(proofs[0].id); },[proofs,selectedId]);
+                const tabData = clickedTab.dataset.tab;
 
-      function addOrUpdate(p: CapabilityProof){
-        setProofs(prev=>{
-          const idx = prev.findIndex(q=>q.id===p.id);
-          if (idx>=0){ const next = prev.slice(); next[idx] = p; return next; }
-          return [p, ...prev];
+                // Update tab buttons
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                clickedTab.classList.add('active');
+
+                // Update tab content
+                tabContents.forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabData) {
+                        content.classList.add('active');
+                    }
+                });
+            });
+
+            // --- Proof Card Flip Logic ---
+            const proofCards = document.querySelectorAll('.proof-card');
+            proofCards.forEach(card => {
+                card.addEventListener('click', (e) => {
+                    // Prevent flipping if a link inside the card is clicked (future-proofing)
+                    if (e.target.closest('a')) return;
+                    card.classList.toggle('is-flipped');
+                });
+            });
+
+            // --- ProofBuilder Wizard Logic ---
+            const proofForm = document.getElementById('proof-builder-form');
+            const generateBtn = document.getElementById('generate-proof-btn');
+            const newProofContainer = document.getElementById('new-proof-container');
+            const newProofOutput = document.getElementById('new-proof-output');
+
+            generateBtn.addEventListener('click', (e) => {
+                e.preventDefault(); // Stop form submission
+
+                // Get all values from the form
+                const func = document.getElementById('wiz-function').value || "Not specified";
+                const baseline = document.getElementById('wiz-baseline').value || "Not specified";
+                const band = document.getElementById('wiz-band').value || "Not specified";
+                const protocol = document.getElementById('wiz-protocol').value || "Not specified";
+                const evidence = document.getElementById('wiz-evidence').value || "Not specified";
+                const steward = document.getElementById('wiz-steward').value || "Not specified";
+                const failure = document.getElementById('wiz-failure').value || "Not specified";
+
+                // Get checklist values
+                const checkOptIn = document.getElementById('wiz-check-opt-in').checked;
+                const checkExit = document.getElementById('wiz-check-exit').checked;
+                const checkNoCoercion = document.getElementById('wiz-check-no-coercion').checked;
+
+                let identityText = "<ul>";
+                if (checkOptIn) identityText += "<li class='list-disc list-inside'>Clear opt-in</li>";
+                if (checkExit) identityText += "<li class='list-disc list-inside'>Right of Exit</li>";
+                if (checkNoCoercion) identityText += "<li class='list-disc list-inside'>No coercion</li>";
+                if (identityText === "<ul>") identityText = "Not specified";
+                else identityText += "</ul>";
+
+                // Create the new card HTML
+                const newCardHTML = `
+                    <div class="proof-card h-[400px] is-flipped"> <!-- Start flipped so back is visible -->
+                        <div class="proof-card-inner">
+                            <div class="proof-card-front p-6 justify-between">
+                                <!-- Front is simple -->
+                                <div>
+                                    <span class="inline-block bg-gray-100 text-gray-800 text-xs font-semibold px-3 py-1 rounded-full mb-3">L0 - Seed</span>
+                                    <h3 class="text-2xl font-bold text-slate-900">${func.substring(0, 20)}...</h3>
+                                    <p class="text-lg text-slate-600 mt-1">Your New Proof</p>
+                                </div>
+                                <div class="mt-4">
+                                    <p class="text-3xl font-bold text-green-600">${band}</p>
+                                    <p class="text-slate-500">Expected Outcome</p>
+                                    <p class="mt-6 text-sm font-semibold text-indigo-600 text-center">Click to See Full Proof</p>
+                                </div>
+                            </div>
+                            <div class="proof-card-back p-6">
+                                <h4 class="text-lg font-bold text-slate-800 mb-4">Proof: ${func.substring(0, 30)}...</h4>
+                                <dl><dt>Function & Context</dt><dd>${func}</dd></dl>
+                                <dl><dt>Outcome Band</dt><dd>${band} (Baseline: ${baseline})</dd></dl>
+                                <dl><dt>Protocol</dt><dd>${protocol}</dd></dl>
+                                <dl><dt>Evidence & Robustness</dt><dd>${evidence}</dd></dl>
+                                <dl><dt>Identity Integrity (ATCF)</dt><dd>${identityText}</dd></dl>
+                                <dl><dt>Governance</dt><dd>${steward}</dd></dl>
+                                <dl><dt>Failure Envelope</dt><dd>${failure}</dd></dl>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Add the new card and show the container
+                newProofOutput.innerHTML = newCardHTML;
+                newProofContainer.classList.remove('hidden');
+
+                // Add flip listener to the new card
+                const newCard = newProofOutput.querySelector('.proof-card');
+                newCard.addEventListener('click', () => newCard.classList.toggle('is-flipped'));
+
+                // Scroll to the new card
+                newProofContainer.scrollIntoView({ behavior: 'smooth' });
+
+                // Reset the form
+                proofForm.reset();
+            });
+
+            // --- Failure Explorer Logic ---
+            const failRunBtn = document.getElementById('fail-run-btn');
+            const failResult = document.getElementById('fail-result');
+            const failProofSelect = document.getElementById('fail-proof');
+            const failStressSelect = document.getElementById('fail-stress');
+
+            failRunBtn.addEventListener('click', () => {
+                const proof = failProofSelect.value;
+                const stress = failStressSelect.value;
+                
+                failResult.classList.remove('hidden', 'bg-red-100', 'text-red-900', 'bg-green-100', 'text-green-900', 'bg-yellow-100', 'text-yellow-900');
+                
+                if (stress === 'none') {
+                    failResult.textContent = 'Please select a stressor to test.';
+                    failResult.classList.add('bg-yellow-100', 'text-yellow-900');
+                    return;
+                }
+                
+                if (stress === 'fines') {
+                    failResult.textContent = 'IDENTITY BREACH! Coercion violates ATCF. This "proof" is inadmissible.';
+                    failResult.classList.add('bg-red-100', 'text-red-900');
+                    return;
+                }
+
+                if (proof === 'energy' && stress === 'landlord') {
+                    failResult.textContent = 'PROOF FAILED. Outcome collapses. This is outside the known "Failure Envelope."';
+                    failResult.classList.add('bg-red-100', 'text-red-900');
+                } else if (proof === 'housing' && stress === 'transit') {
+                    failResult.textContent = 'PROOF FAILED. Outcome collapses. This is outside the known "Failure Envelope."';
+                    failResult.classList.add('bg-red-100', 'text-red-900');
+                } else {
+                    failResult.textContent = 'PROOF STABLE. The selected stressor does not break this proof.';
+                    failResult.classList.add('bg-green-100', 'text-green-900');
+                }
+            });
         });
-        setActive("gallery");
-        setSelectedId(p.id);
-      }
-      function remove(id:string){ setProofs(prev=>prev.filter(p=>p.id!==id)); if (selectedId===id) setSelectedId(null); }
-
-      function exportJSON(){
-        const blob = new Blob([JSON.stringify(proofs,null,2)], {type: "application/json"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = "amc_capability_proofs.json"; a.click(); URL.revokeObjectURL(url);
-      }
-      function importJSON(ev:any){ const file = ev.target.files?.[0]; if(!file) return; const reader = new FileReader(); reader.onload = ()=>{ try{ const parsed = JSON.parse(String(reader.result)); if(Array.isArray(parsed)) setProofs(parsed); } catch{} }; reader.readAsText(file); }
-      function loadExamples(){ const ex = exampleProofs(); setProofs(prev=>[...ex, ...prev]); setSelectedId(ex[0].id); setActive("gallery"); }
-      async function copy(text:string){ try{ await navigator.clipboard.writeText(text);}catch{} }
-      const shareSelected = selected ? makeProofLink(selected) : ""; const shareGallery = makeGalleryLink(proofs);
-      function saveRubric(r:RubricState){ if (!selected) return; addOrUpdate({...selected, rubric: r, updatedAt: nowISO()}); }
-
-      return (
-        <div className="p-4 md:p-6 max-w-6xl mx-auto">
-          <header className="mb-4">
-            <h1 className="text-2xl font-bold">AMC Capability Proofs – Teaching App (Prototype)</h1>
-            <p className="text-gray-700 text-sm">Prove small. Publish bands. Protect identity. Replicate. Translate. Repair at the edges.</p>
-          </header>
-
-          <nav className="flex flex-wrap gap-2 mb-4 items-center">
-            {[
-              ["gallery","Gallery"],
-              ["create","Create Proof"],
-              ["audit","Audit"],
-              ["translate","Translation Studio"],
-              ["abm","ABM Sandbox"],
-              ["rubric","Rubric & Share"],
-            ].map(([key,label])=> (
-              <button key={key} onClick={()=>setActive(key as Tab)} className={\`px-3 py-1.5 rounded \${active===key?"bg-gray-900 text-white":"bg-gray-200"}\`}>{label}</button>
-            ))}
-            <div className="flex-1"/>
-            <button onClick={loadExamples} className="px-3 py-1.5 rounded bg-amber-500 text-white">Load Example Proofs</button>
-            <button onClick={exportJSON} className="px-3 py-1.5 rounded bg-gray-900 text-white">Export JSON</button>
-            <label className="px-3 py-1.5 rounded bg-gray-200 cursor-pointer">Import
-              <input type="file" accept="application/json" onChange={importJSON} className="hidden"/>
-            </label>
-          </nav>
-
-          {active==="gallery" && (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="border rounded p-3 bg-white">
-                  <div className="text-sm font-semibold mb-2">Proofs</div>
-                  {proofs.length===0 && <div className="text-sm text-gray-600">No proofs yet. Load examples or create one.</div>}
-                  <ul className="divide-y">
-                    {proofs.map(p=> (
-                      <li key={p.id} className={\`py-2 flex items-center justify-between \${selectedId===p.id?"bg-gray-50":""}\`}>
-                        <button className="text-left flex-1 px-2" onClick={()=>setSelectedId(p.id)}>
-                          <div className="font-medium">{p.title}</div>
-                          <div className="text-xs text-gray-600">L{p.proofLevel} • Score {scoreProof(p)} • {p.outcomeBand.unit} {fmtPct(p.outcomeBand.point)}</div>
-                        </button>
-                        <button className="px-2 py-1 text-xs rounded bg-red-100 text-red-700" onClick={()=>remove(p.id)}>Delete</button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {selected && (
-                  <div className="border rounded p-3 bg-white">
-                    <div className="text-sm font-semibold mb-2">Adversarial Audit</div>
-                    <TextArea value={selected.adversarialFindings||""} onChange={(v)=>{
-                      const next = {...selected, adversarialFindings: v, updatedAt: nowISO()};
-                      setProofs(prev=>prev.map(p=>p.id===selected.id?next:p));
-                    }} rows={6} placeholder="Try to break this claim. What could be wrong or fragile?"/>
-                  </div>
-                )}
-              </div>
-              <div>
-                {selected ? <ProofCard p={selected}/> : <div className="text-sm text-gray-600">Select a proof to preview.</div>}
-              </div>
-            </div>
-          )}
-
-          {active==="create" && (<ProofForm onSave={addOrUpdate} initial={undefined}/>) }
-
-          {active==="audit" && (
-            selected ? (
-              <div className="space-y-3">
-                <ProofCard p={selected}/>
-                <AuditTables p={selected}/>
-              </div>
-            ) : <div className="text-sm text-gray-600">Select a proof in the Gallery first.</div>
-          )}
-
-          {active==="translate" && (
-            selected ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="border rounded p-3 bg-white">
-                  <div className="font-semibold mb-2">Translation Studio</div>
-                  <div className="text-xs text-gray-600 mb-2">Render the <em>same verified outcome</em> in multiple moral grammars without lying.</div>
-                  <div className="space-y-2">
-                    <div>
-                      <div className="text-xs text-gray-600">Stewardship</div>
-                      <TextArea value={selected.translations.stewardship||""} onChange={(v)=>{
-                        const next = {...selected, translations: {...selected.translations, stewardship: v}, updatedAt: nowISO()};
-                        setProofs(prev=>prev.map(p=>p.id===selected.id?next:p));
-                      }}/>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-600">Justice</div>
-                      <TextArea value={selected.translations.justice||""} onChange={(v)=>{
-                        const next = {...selected, translations: {...selected.translations, justice: v}, updatedAt: nowISO()};
-                        setProofs(prev=>prev.map(p=>p.id===selected.id?next:p));
-                      }}/>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-600">Thrift</div>
-                      <TextArea value={selected.translations.thrift||""} onChange={(v)=>{
-                        const next = {...selected, translations: {...selected.translations, thrift: v}, updatedAt: nowISO()};
-                        setProofs(prev=>prev.map(p=>p.id===selected.id?next:p));
-                      }}/>
-                    </div>
-                    <div>
-                      <div className="text-xs text-gray-600">Beauty</div>
-                      <TextArea value={selected.translations.beauty||""} onChange={(v)=>{
-                        const next = {...selected, translations: {...selected.translations, beauty: v}, updatedAt: nowISO()};
-                        setProofs(prev=>prev.map(p=>p.id===selected.id?next:p));
-                      }}/>
-                    </div>
-                  </div>
-                </div>
-                <div><ProofCard p={selected}/></div>
-              </div>
-            ) : <div className="text-sm text-gray-600">Select a proof in the Gallery first.</div>
-          )}
-
-          {active==="abm" && (<ABMSandbox/>) }
-
-          {active==="rubric" && (
-            selected ? (
-              <div className="space-y-3">
-                <ProofCard p={selected}/>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <RubricPanel p={selected} onSave={saveRubric}/>
-                  <div className="border rounded-lg p-4 bg-white">
-                    <h3 className="text-lg font-semibold mb-2">Share Links</h3>
-                    <div className="text-sm text-gray-700 mb-2">Create immutable links that carry a read-only snapshot of the selected proof or the whole gallery (encoded in the URL hash).</div>
-                    <div className="space-y-3">
-                      <div className="p-2 bg-gray-50 rounded">
-                        <div className="text-xs uppercase text-gray-600 mb-1">Selected Proof</div>
-                        <div className="text-xs break-all bg-white border rounded p-2">{selected ? makeProofLink(selected) : "Select a proof to generate a link."}</div>
-                      </div>
-                      <div className="p-2 bg-gray-50 rounded">
-                        <div className="text-xs uppercase text-gray-600 mb-1">Gallery</div>
-                        <div className="text-xs break-all bg-white border rounded p-2">{makeGalleryLink(proofs)}</div>
-                      </div>
-                      <div className="text-xs text-gray-600">Tip: Links use the URL hash (after #), so they can be shared safely without a server; recipients can import via the link or your exported JSON.</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : <div className="text-sm text-gray-600">Select a proof in the Gallery first.</div>
-          )}
-
-          <footer className="mt-8 text-xs text-gray-500">
-            <div>Prototype: AMC Capability Proofs • Keep the center simple. Let complexity live at the edges. Instrument edges. Repair quickly.</div>
-          </footer>
-        </div>
-      );
-    }
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<CapabilityProofsApp/>);
-  </script>
+    </script>
 </body>
 </html>
