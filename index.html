@@ -56,7 +56,7 @@
     // ---------- Utilities ----------
     function uid(){ return Math.random().toString(36).slice(2) + Date.now().toString(36); }
     function clamp(n:number,min:number,max:number){ return Math.max(min, Math.min(max, n)); }
-    function fmtPct(n:number){ const sign = n>0? "+":""; return `${sign}${n.toFixed(1)}%`; }
+    function fmtPct(n:number){ const sign = n>0? "+":""; return \`\${sign}\${n.toFixed(1)}%\`; }
     function nowISO(){ return new Date().toISOString(); }
 
     function scoreProof(p: CapabilityProof){
@@ -202,8 +202,8 @@
     // ---------- Shareable Links (URL hash) ----------
     function encodeState(obj:any):string{ try{ const json = JSON.stringify(obj); return btoa(unescape(encodeURIComponent(json))); } catch { return ""; } }
     function decodeState<T=any>(s:string):T|null{ try { const json = decodeURIComponent(escape(atob(s))); return JSON.parse(json); } catch { return null; } }
-    function makeProofLink(p:CapabilityProof){ const payload = { proof: p }; return `${location.origin}${location.pathname}#p=${encodeState(payload)}`; }
-    function makeGalleryLink(proofs:CapabilityProof[]){ const slim = proofs.map(({adversarialFindings, rubric, ...rest})=>rest); const payload = { gallery: slim }; return `${location.origin}${location.pathname}#g=${encodeState(payload)}`; }
+    function makeProofLink(p:CapabilityProof){ const payload = { proof: p }; return \`\${location.origin}\${location.pathname}#p=\${encodeState(payload)}\`; }
+    function makeGalleryLink(proofs:CapabilityProof[]){ const slim = proofs.map(({adversarialFindings, rubric, ...rest})=>rest); const payload = { gallery: slim }; return \`\${location.origin}\${location.pathname}#g=\${encodeState(payload)}\`; }
     function parseHash(): {proof?:CapabilityProof; gallery?:CapabilityProof[]} | null {
       if (!location.hash) return null; const h = location.hash.slice(1);
       if (h.startsWith("p=")) { const data = decodeState<{proof:CapabilityProof}>(h.slice(2)); return data || null; }
@@ -263,7 +263,7 @@
                 <button className="px-3 py-1.5 rounded bg-green-600 text-white" onClick={()=>setRunning(r=>!r)}>{running?"Pause":"Run"}</button>
               </div>
               <div style={{ width: boxSize*size, height: boxSize*size }} className="border rounded bg-white shadow">
-                <div className="grid" style={{ gridTemplateColumns: `repeat(${size}, ${boxSize}px)` }}>
+                <div className="grid" style={{ gridTemplateColumns: \`repeat(\${size}, \${boxSize}px)\` }}>
                   {cells.map((c,i)=>{
                     const bg = c===""?"#ffffff" : c==="A"?"#111827" : "#9ca3af";
                     return <div key={i} title={c===""?"Vacant": c} style={{ width: boxSize, height: boxSize, background: bg, border: c===""?"1px solid #e5e7eb":"none"}}/>;
@@ -347,7 +347,7 @@
               </div>
             </div>
             <div>
-              <div><span className="font-semibold">Evidence design:</span> {p.evidenceDesign} {p.nParticipants?`• N=${p.nParticipants}`:""} {p.durationWeeks?`• ${p.durationWeeks} weeks`:""}</div>
+              <div><span className="font-semibold">Evidence design:</span> {p.evidenceDesign} {p.nParticipants?`• N=\${p.nParticipants}`:""} {p.durationWeeks?`• \${p.durationWeeks} weeks`:""}</div>
               <div className="mt-2"><span className="font-semibold">Robustness checks:</span> {p.robustnessChecks.join("; ") || "—"}</div>
               <div className="mt-2"><span className="font-semibold">Fairness/side-effects:</span> {p.fairnessPanel || "—"}</div>
               <div className="mt-2"><span className="font-semibold">Identity safeguards:</span> {p.identitySafeguards.join("; ") || "—"}</div>
@@ -386,9 +386,9 @@
             <div className="font-semibold mb-2">Table 1: Evidence vs Outcome Band</div>
             <div className="mb-2">Does the evidence justify the claimed band?</div>
             <div className="flex gap-2 mb-2">
-              <button className={`px-3 py-1.5 rounded ${evPass===true?"bg-green-600 text-white":"bg-gray-200"}`} onClick={()=>setEvPass(true)}>Pass</button>
-              <button className={`px-3 py-1.5 rounded ${evPass===false?"bg-red-600 text-white":"bg-gray-200"}`} onClick={()=>setEvPass(false)}>Fail</button>
-              <button className={`px-3 py-1.5 rounded ${evPass===null?"bg-gray-900 text-white":"bg-gray-200"}`} onClick={()=>setEvPass(null)}>Unset</button>
+              <button className={\`px-3 py-1.5 rounded \${evPass===true?"bg-green-600 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(true)}>Pass</button>
+              <button className={\`px-3 py-1.5 rounded \${evPass===false?"bg-red-600 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(false)}>Fail</button>
+              <button className={\`px-3 py-1.5 rounded \${evPass===null?"bg-gray-900 text-white":"bg-gray-200"}\`} onClick={()=>setEvPass(null)}>Unset</button>
             </div>
             <TextArea value={evNotes} onChange={setEvNotes} rows={5} placeholder="Notes: design choice, biases, replication, sensitivity…"/>
           </div>
@@ -396,9 +396,9 @@
             <div className="font-semibold mb-2">Table 2: Identity / Soul-Safety (ATCF)</div>
             <div className="mb-2">Are identity safeguards adequate?</div>
             <div className="flex gap-2 mb-2">
-              <button className={`px-3 py-1.5 rounded ${idPass===true?"bg-green-600 text-white":"bg-gray-200"}`} onClick={()=>setIdPass(true)}>Pass</button>
-              <button className={`px-3 py-1.5 rounded ${idPass===false?"bg-red-600 text-white":"bg-gray-200"}`} onClick={()=>setIdPass(false)}>Fail</button>
-              <button className={`px-3 py-1.5 rounded ${idPass===null?"bg-gray-900 text-white":"bg-gray-200"}`} onClick={()=>setIdPass(null)}>Unset</button>
+              <button className={\`px-3 py-1.5 rounded \${idPass===true?"bg-green-600 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(true)}>Pass</button>
+              <button className={\`px-3 py-1.5 rounded \${idPass===false?"bg-red-600 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(false)}>Fail</button>
+              <button className={\`px-3 py-1.5 rounded \${idPass===null?"bg-gray-900 text-white":"bg-gray-200"}\`} onClick={()=>setIdPass(null)}>Unset</button>
             </div>
             <TextArea value={idNotes} onChange={setIdNotes} rows={5} placeholder="Notes: opt-in clarity, exit symmetry, role choice, dignity lines…"/>
           </div>
@@ -436,12 +436,12 @@
       function save(){ onSave({ selections, notes, total }); }
       function toMarkdown(){
         const lines = [
-          `# Rubric — ${p.title}`,
-          `Total: ${Math.round(total)}/100`,
+          \`# Rubric — \${p.title}\`,
+          \`Total: \${Math.round(total)}/100\`,
           "",
-          ...RUBRIC_CRITERIA.map((c:any)=>`- **${c.label}** (${c.weight}): ${selections[c.id] || "Missing"}`),
+          ...RUBRIC_CRITERIA.map((c:any)=>\`- **\${c.label}** (\${c.weight}): \${selections[c.id] || "Missing"}\`),
           "",
-          notes?`**Notes:**\n${notes}`:""
+          notes?\`**Notes:**\n\${notes}\`:""
         ].filter(Boolean);
         return lines.join("\n");
       }
@@ -615,7 +615,7 @@
         <div className="p-4 md:p-6 max-w-6xl mx-auto">
           <header className="mb-4">
             <h1 className="text-2xl font-bold">AMC Capability Proofs – Teaching App (Prototype)</h1>
-            <p className="text-gray-700 text-sm"><p className="text-gray-700 text-sm">Prove small. Publish bands. Protect identity. Replicate. Translate. Repair at the edges.</p>
+            <p className="text-gray-700 text-sm">Prove small. Publish bands. Protect identity. Replicate. Translate. Repair at the edges.</p>
           </header>
 
           <nav className="flex flex-wrap gap-2 mb-4 items-center">
@@ -627,7 +627,7 @@
               ["abm","ABM Sandbox"],
               ["rubric","Rubric & Share"],
             ].map(([key,label])=> (
-              <button key={key} onClick={()=>setActive(key as Tab)} className={`px-3 py-1.5 rounded ${active===key?"bg-gray-900 text-white":"bg-gray-200"}`}>{label}</button>
+              <button key={key} onClick={()=>setActive(key as Tab)} className={\`px-3 py-1.5 rounded \${active===key?"bg-gray-900 text-white":"bg-gray-200"}\`}>{label}</button>
             ))}
             <div className="flex-1"/>
             <button onClick={loadExamples} className="px-3 py-1.5 rounded bg-amber-500 text-white">Load Example Proofs</button>
@@ -645,7 +645,7 @@
                   {proofs.length===0 && <div className="text-sm text-gray-600">No proofs yet. Load examples or create one.</div>}
                   <ul className="divide-y">
                     {proofs.map(p=> (
-                      <li key={p.id} className={`py-2 flex items-center justify-between ${selectedId===p.id?"bg-gray-50":""}`}>
+                      <li key={p.id} className={\`py-2 flex items-center justify-between \${selectedId===p.id?"bg-gray-50":""}\`}>
                         <button className="text-left flex-1 px-2" onClick={()=>setSelectedId(p.id)}>
                           <div className="font-medium">{p.title}</div>
                           <div className="text-xs text-gray-600">L{p.proofLevel} • Score {scoreProof(p)} • {p.outcomeBand.unit} {fmtPct(p.outcomeBand.point)}</div>
